@@ -43,7 +43,12 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Class1.cs" />
+    <Compile Include="AckResult.cs" />
+    <Compile Include="DataFormatFault.cs" />
+    <Compile Include="HourlyConsumptionSample.cs" />
+    <Compile Include="IConsumptionService.cs" />
+    <Compile Include="SessionMeta.cs" />
+    <Compile Include="ValidationFault.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
