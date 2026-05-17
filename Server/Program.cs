@@ -7,11 +7,11 @@ namespace Server
     {
         static void Main(string[] args)
         {
-            // Dispose pattern: ServiceHost implementira IDisposable preko ICommunicationObject.
-            // Koristimo using kako bi se host pravilno zatvorio i u slucaju izuzetka.
             ServiceHost host = null;
+            ConsoleSubscriber subscriber = null;
             try
             {
+                subscriber = new ConsoleSubscriber();
                 host = new ServiceHost(typeof(ConsumptionService));
                 host.Open();
 
@@ -23,6 +23,8 @@ namespace Server
                     Console.WriteLine("  Contract: {0}", ep.Contract.ContractType.FullName);
                 }
                 Console.WriteLine();
+                Console.WriteLine("Pretplate aktivne: OnTransferStarted, OnSampleReceived, OnTransferCompleted, OnWarningRaised.");
+                Console.WriteLine();
                 Console.WriteLine("Pritisnite ENTER za zaustavljanje servisa...");
                 Console.ReadLine();
             }
@@ -32,18 +34,13 @@ namespace Server
             }
             finally
             {
+                if (subscriber != null) subscriber.Unsubscribe();
                 if (host != null)
                 {
                     try
                     {
-                        if (host.State == CommunicationState.Faulted)
-                        {
-                            host.Abort();
-                        }
-                        else
-                        {
-                            host.Close();
-                        }
+                        if (host.State == CommunicationState.Faulted) host.Abort();
+                        else host.Close();
                     }
                     catch
                     {

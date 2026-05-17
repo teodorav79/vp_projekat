@@ -34,6 +34,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
+    <Reference Include="System.Configuration" />
     <Reference Include="System.Core" />
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.ServiceModel" />
@@ -45,8 +46,15 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Analytics.cs" />
+    <Compile Include="ConsoleSubscriber.cs" />
     <Compile Include="ConsumptionService.cs" />
+    <Compile Include="EventBus.cs" />
     <Compile Include="Program.cs" />
+    <Compile Include="SampleEventArgs.cs" />
+    <Compile Include="SessionFileWriter.cs" />
+    <Compile Include="TransferEventArgs.cs" />
+    <Compile Include="WarningEventArgs.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
