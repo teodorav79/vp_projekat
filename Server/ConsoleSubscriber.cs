@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace Server
 {
@@ -22,27 +23,65 @@ namespace Server
 
         private void OnTransferStarted(object sender, TransferEventArgs e)
         {
-            Console.WriteLine(">> [EVENT] OnTransferStarted: {0} {1:yyyy-MM-dd} src={2} total={3}",
-                e.CountryCode, e.Date, e.SourceFileName, e.TotalSamples);
+            ConsoleUi.Info(string.Format(CultureInfo.InvariantCulture,
+                "Prenos je u toku... ({0} {1:yyyy-MM-dd}, total={2})",
+                e.CountryCode, e.Date, e.TotalSamples));
         }
 
         private void OnSampleReceived(object sender, SampleEventArgs e)
         {
-            Console.WriteLine(">> [EVENT] OnSampleReceived: row#{0} H={1} actual={2} forecast={3} ({4}/{5}, {6:F2}%)",
+            ConsoleUi.Sample(string.Format(CultureInfo.InvariantCulture,
+                "row#{0}, H={1}, Actual={2} MW, Forecast={3} MW   ({4}/{5}, {6:F2}%)",
                 e.Sample.RowIndex, e.Sample.Hour, e.Sample.ActualMW, e.Sample.ForecastMW,
-                e.Received, e.Total, e.Progress);
+                e.Received, e.Total, e.Progress));
         }
 
         private void OnTransferCompleted(object sender, TransferEventArgs e)
         {
-            Console.WriteLine(">> [EVENT] OnTransferCompleted: {0} {1:yyyy-MM-dd} primljeno {2}/{3} ({4:F2}%)",
-                e.CountryCode, e.Date, e.Received, e.TotalSamples, e.Progress);
+            ConsoleUi.Info(string.Format(CultureInfo.InvariantCulture,
+                "Zavrsen prenos. Primljeno {0}/{1} ({2:F2}%)",
+                e.Received, e.TotalSamples, e.Progress));
         }
 
         private void OnWarningRaised(object sender, WarningEventArgs e)
         {
-            Console.WriteLine(">> [WARNING] {0} meter={1} H={2} actual={3} forecast={4} delta={5} dir={6} dailySum={7} threshold={8} : {9}",
-                e.Type, e.MeterID, e.Hour, e.ActualMW, e.ForecastMW, e.Delta, e.Direction, e.DailySum, e.Threshold, e.Message);
+            ConsoleUi.Blank();
+            ConsoleUi.WarningHeader();
+            string tag;
+            string body;
+            switch (e.Type)
+            {
+                case WarningType.UnderConsumptionWarning:
+                    tag = "UNDER CONSUMPTION";
+                    body = string.Format(CultureInfo.InvariantCulture,
+                        "H={0}, Actual={1} MW, Forecast={2} MW, meter={3}, smer: ispod ocekivanog",
+                        e.Hour, e.ActualMW, e.ForecastMW, e.MeterID);
+                    break;
+                case WarningType.OverConsumptionWarning:
+                    tag = "OVER CONSUMPTION";
+                    body = string.Format(CultureInfo.InvariantCulture,
+                        "H={0}, Actual={1} MW, Forecast={2} MW, meter={3}, smer: iznad ocekivanog",
+                        e.Hour, e.ActualMW, e.ForecastMW, e.MeterID);
+                    break;
+                case WarningType.ConsumptionSpikeWarning:
+                    tag = "CONSUMPTION SPIKE";
+                    body = string.Format(CultureInfo.InvariantCulture,
+                        "ΔActual={0} MW, smer: {1}, H={2}, meter={3}",
+                        e.Delta, e.Direction == "up" ? "iznad ocekivanog" : "ispod ocekivanog",
+                        e.Hour, e.MeterID);
+                    break;
+                case WarningType.DailyLimitExceededWarning:
+                    tag = "DAILY LIMIT EXCEEDED";
+                    body = string.Format(CultureInfo.InvariantCulture,
+                        "DailySum={0} MW > DailyLimitMW={1} MW, H={2}, meter={3}",
+                        e.DailySum, e.Threshold, e.Hour, e.MeterID);
+                    break;
+                default:
+                    tag = "WARNING";
+                    body = e.Message;
+                    break;
+            }
+            ConsoleUi.WarningBody(tag, body);
         }
     }
 }

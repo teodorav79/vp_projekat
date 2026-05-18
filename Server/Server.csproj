@@ -48,6 +48,7 @@
   <ItemGroup>
     <Compile Include="Analytics.cs" />
     <Compile Include="ConsoleSubscriber.cs" />
+    <Compile Include="ConsoleUi.cs" />
     <Compile Include="ConsumptionService.cs" />
     <Compile Include="EventBus.cs" />
     <Compile Include="Program.cs" />

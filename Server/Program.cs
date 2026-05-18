@@ -1,5 +1,6 @@
 using System;
 using System.ServiceModel;
+using System.Text;
 
 namespace Server
 {
@@ -7,6 +8,13 @@ namespace Server
     {
         static void Main(string[] args)
         {
+            try
+            {
+                Console.OutputEncoding = Encoding.UTF8;
+                Console.Title = "Evidencija potrosnje - SERVER";
+            }
+            catch { }
+
             ServiceHost host = null;
             ConsoleSubscriber subscriber = null;
             try
@@ -15,22 +23,21 @@ namespace Server
                 host = new ServiceHost(typeof(ConsumptionService));
                 host.Open();
 
-                Console.WriteLine("WCF servis 'ConsumptionService' je pokrenut.");
+                ConsoleUi.Info("WCF servis 'ConsumptionService' je pokrenut.");
                 foreach (var ep in host.Description.Endpoints)
                 {
-                    Console.WriteLine("  Endpoint: {0}", ep.Address);
-                    Console.WriteLine("  Binding : {0}", ep.Binding.Name);
-                    Console.WriteLine("  Contract: {0}", ep.Contract.ContractType.FullName);
+                    ConsoleUi.Info("Endpoint: " + ep.Address);
+                    ConsoleUi.Info("Binding : " + ep.Binding.Name);
+                    ConsoleUi.Info("Contract: " + ep.Contract.ContractType.FullName);
                 }
-                Console.WriteLine();
-                Console.WriteLine("Pretplate aktivne: OnTransferStarted, OnSampleReceived, OnTransferCompleted, OnWarningRaised.");
-                Console.WriteLine();
-                Console.WriteLine("Pritisnite ENTER za zaustavljanje servisa...");
+                ConsoleUi.Info("Pretplate aktivne: OnTransferStarted, OnSampleReceived, OnTransferCompleted, OnWarningRaised.");
+                ConsoleUi.Blank();
+                ConsoleUi.Info("Pritisnite ENTER za zaustavljanje servisa...");
                 Console.ReadLine();
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Greska prilikom pokretanja servisa: {0}", ex.Message);
+                ConsoleUi.Fault("ERROR", "Greska prilikom pokretanja servisa: " + ex.Message);
             }
             finally
             {
@@ -47,7 +54,7 @@ namespace Server
                         host.Abort();
                     }
                 }
-                Console.WriteLine("Servis zatvoren. Resursi oslobodjeni.");
+                ConsoleUi.Info("Servis zatvoren. Resursi oslobodjeni.");
             }
         }
     }

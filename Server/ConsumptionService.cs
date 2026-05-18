@@ -57,16 +57,15 @@ namespace Server
             double limit = ReadDouble("DailyLimitMW", double.MaxValue);
             _analytics = new Analytics(alpha, beta, spike, limit, meta.CountryCode.ToUpperInvariant());
 
-            Console.WriteLine();
-            Console.WriteLine("=== StartSession ===");
-            Console.WriteLine("  Country : {0}", meta.CountryCode);
-            Console.WriteLine("  Date    : {0:yyyy-MM-dd}", meta.Date);
-            Console.WriteLine("  Source  : {0}", meta.SourceFileName);
-            Console.WriteLine("  Total   : {0} uzoraka", meta.TotalSamples);
-            Console.WriteLine("  Session : {0}", _writer.SessionPath);
-            Console.WriteLine("  Rejects : {0}", _writer.RejectsPath);
-            Console.WriteLine("  Alpha={0} Beta={1} SpikeDeltaMW={2} DailyLimitMW={3}",
-                alpha, beta, spike, limit);
+            ConsoleUi.Blank();
+            ConsoleUi.Info(string.Format(CultureInfo.InvariantCulture,
+                "Pokrenut prenos: country={0}, date={1:yyyy-MM-dd}, source={2}, total={3}",
+                meta.CountryCode, meta.Date, meta.SourceFileName, meta.TotalSamples));
+            ConsoleUi.Info("Session fajl: " + _writer.SessionPath);
+            ConsoleUi.Info("Rejects fajl: " + _writer.RejectsPath);
+            ConsoleUi.Info(string.Format(CultureInfo.InvariantCulture,
+                "Pragovi: alpha={0}, beta={1}, SpikeDeltaMW={2}, DailyLimitMW={3}",
+                alpha, beta, spike, limit));
 
             EventBus.RaiseTransferStarted(this, new TransferEventArgs
             {
@@ -105,8 +104,8 @@ namespace Server
             {
                 _received++;
                 _writer.WriteReject(sample.RowIndex, "NaN vrednost", SerializeRow(sample));
-                Console.WriteLine("  prenos u toku [{0}/{1}, {2:F2}%] MISSING (NaN) row#{3} -> rejects",
-                    _received, _meta.TotalSamples, ProgressPct(), sample.RowIndex);
+                ConsoleUi.Reject(string.Format(CultureInfo.InvariantCulture,
+                    "{0}-> Uzorak odbijen: NaN vrednost (row#{1})", _received, sample.RowIndex));
                 return new AckResult
                 {
                     Status = AckStatus.Missing,
@@ -119,6 +118,9 @@ namespace Server
             if (sample.Hour < 0 || sample.Hour > 23)
             {
                 _writer.WriteReject(sample.RowIndex, "Hour van [0,23]", SerializeRow(sample));
+                ConsoleUi.Reject(string.Format(CultureInfo.InvariantCulture,
+                    "{0}-> Uzorak odbijen: Hour={1} van [0,23] (row#{2})",
+                    _received + 1, sample.Hour, sample.RowIndex));
                 throw new FaultException<ValidationFault>(
                     new ValidationFault { Field = "Hour", Reason = "Hour van opsega [0,23].", RowIndex = sample.RowIndex },
                     new FaultReason("Validation: Hour van opsega."));
@@ -126,6 +128,9 @@ namespace Server
             if (sample.ActualMW < 0)
             {
                 _writer.WriteReject(sample.RowIndex, "ActualMW < 0", SerializeRow(sample));
+                ConsoleUi.Reject(string.Format(CultureInfo.InvariantCulture,
+                    "{0}-> Uzorak odbijen: ActualMW={1} < 0 (row#{2})",
+                    _received + 1, sample.ActualMW, sample.RowIndex));
                 throw new FaultException<ValidationFault>(
                     new ValidationFault { Field = "ActualMW", Reason = "ActualMW < 0.", RowIndex = sample.RowIndex },
                     new FaultReason("Validation: ActualMW negativan."));
@@ -133,6 +138,9 @@ namespace Server
             if (sample.ForecastMW < 0)
             {
                 _writer.WriteReject(sample.RowIndex, "ForecastMW < 0", SerializeRow(sample));
+                ConsoleUi.Reject(string.Format(CultureInfo.InvariantCulture,
+                    "{0}-> Uzorak odbijen: ForecastMW={1} < 0 (row#{2})",
+                    _received + 1, sample.ForecastMW, sample.RowIndex));
                 throw new FaultException<ValidationFault>(
                     new ValidationFault { Field = "ForecastMW", Reason = "ForecastMW < 0.", RowIndex = sample.RowIndex },
                     new FaultReason("Validation: ForecastMW negativan."));
@@ -140,6 +148,9 @@ namespace Server
             if (!string.Equals(sample.CountryCode, _meta.CountryCode, StringComparison.OrdinalIgnoreCase))
             {
                 _writer.WriteReject(sample.RowIndex, "CountryCode != sesija", SerializeRow(sample));
+                ConsoleUi.Reject(string.Format(CultureInfo.InvariantCulture,
+                    "{0}-> Uzorak odbijen: CountryCode '{1}' != sesija '{2}'",
+                    _received + 1, sample.CountryCode, _meta.CountryCode));
                 throw new FaultException<ValidationFault>(
                     new ValidationFault { Field = "CountryCode", Reason = "CountryCode ne odgovara sesiji.", RowIndex = sample.RowIndex },
                     new FaultReason("Validation: pogresan CountryCode."));
@@ -148,9 +159,9 @@ namespace Server
             _writer.WriteSample(sample);
             _received++;
 
-            Console.WriteLine("  prenos u toku [{0}/{1}, {2:F2}%] row#{3} H={4} actual={5} MW forecast={6} MW",
-                _received, _meta.TotalSamples, ProgressPct(),
-                sample.RowIndex, sample.Hour, sample.ActualMW, sample.ForecastMW);
+            ConsoleUi.Ok(string.Format(CultureInfo.InvariantCulture,
+                "{0,3} -> Uzorak uspesno obradjen: row#{1}, H={2}, Actual={3} MW, Forecast={4} MW",
+                _received, sample.RowIndex, sample.Hour, sample.ActualMW, sample.ForecastMW));
 
             EventBus.RaiseSampleReceived(this, new SampleEventArgs
             {
@@ -173,8 +184,9 @@ namespace Server
         public AckResult EndSession()
         {
             int total = _meta != null ? _meta.TotalSamples : 0;
-            Console.WriteLine("=== EndSession ===");
-            Console.WriteLine("  prenos zavrsen: {0}/{1} ({2:F2}%)", _received, total, ProgressPct());
+            ConsoleUi.Info(string.Format(CultureInfo.InvariantCulture,
+                "Zavrsen prenos: primljeno {0}/{1} ({2:F2}%)",
+                _received, total, total > 0 ? 100.0 * _received / total : 0.0));
 
             EventBus.RaiseTransferCompleted(this, new TransferEventArgs
             {
@@ -196,12 +208,6 @@ namespace Server
             _sessionActive = false;
             DisposeWriter();
             return result;
-        }
-
-        private double ProgressPct()
-        {
-            if (_meta == null || _meta.TotalSamples <= 0) return 0.0;
-            return 100.0 * _received / _meta.TotalSamples;
         }
 
         private static double ReadDouble(string key, double defaultValue)

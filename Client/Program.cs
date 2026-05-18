@@ -3,6 +3,7 @@ using System.Configuration;
 using System.Globalization;
 using System.IO;
 using System.ServiceModel;
+using System.Text;
 using Common;
 
 namespace Client
@@ -11,6 +12,13 @@ namespace Client
     {
         static void Main(string[] args)
         {
+            try
+            {
+                Console.OutputEncoding = Encoding.UTF8;
+                Console.Title = "Evidencija potrosnje - CLIENT";
+            }
+            catch { }
+
             try
             {
                 string csvPath = ConfigurationManager.AppSettings["CsvFilePath"];
@@ -31,36 +39,34 @@ namespace Client
                 if (!DateTime.TryParseExact(selectedDayStr, "yyyy-MM-dd",
                         CultureInfo.InvariantCulture, DateTimeStyles.None, out selectedDay))
                 {
-                    throw new ConfigurationErrorsException(
-                        "'SelectedDay' mora biti u formatu YYYY-MM-DD.");
+                    throw new ConfigurationErrorsException("'SelectedDay' mora biti u formatu YYYY-MM-DD.");
                 }
 
-                Console.WriteLine("Klijent - Evidencija potrosnje");
-                Console.WriteLine("  CSV       : {0}", csvPath);
-                Console.WriteLine("  Country   : {0}", countryCode);
-                Console.WriteLine("  Day       : {0:yyyy-MM-dd}", selectedDay);
-                Console.WriteLine("  Rejects   : {0}", rejectsPath);
-                Console.WriteLine();
+                ConsoleUi.Info("Klijent - Evidencija potrosnje");
+                ConsoleUi.Info("CSV     : " + csvPath);
+                ConsoleUi.Info("Country : " + countryCode);
+                ConsoleUi.Info("Day     : " + selectedDay.ToString("yyyy-MM-dd"));
+                ConsoleUi.Info("Rejects : " + rejectsPath);
+                ConsoleUi.Blank();
 
-                // Pre slanja: prebroj redove izabranog dana radi popunjavanja TotalSamples u meti.
                 int totalForDay;
                 using (var counter = new CsvDayLoader(csvPath, countryCode, selectedDay, rejectsPath))
                 {
                     totalForDay = counter.CountDaySamples();
-                    Console.WriteLine("Pronadjeno validnih uzoraka za dan: {0}", totalForDay);
-                    Console.WriteLine("Odbijenih (pre-scan): {0} - upisano u {1}",
-                        counter.RejectedCount, counter.RejectsPath);
+                    ConsoleUi.Info(string.Format(CultureInfo.InvariantCulture,
+                        "Pre-scan: validnih={0}, odbijenih={1} -> {2}",
+                        totalForDay, counter.RejectedCount, counter.RejectsPath));
                 }
 
                 if (totalForDay <= 0)
                 {
-                    Console.WriteLine("Nema validnih uzoraka za izabrani dan. Prekidam.");
-                    Console.WriteLine("Pritisnite ENTER za izlaz.");
+                    ConsoleUi.Fault("STOP", "Nema validnih uzoraka za izabrani dan. Prekidam.");
+                    ConsoleUi.Blank();
+                    ConsoleUi.Info("Pritisnite ENTER za izlaz.");
                     Console.ReadLine();
                     return;
                 }
 
-                // Slanje samplova preko WCF - sve resurse oslobadjamo preko using.
                 using (var loader = new CsvDayLoader(csvPath, countryCode, selectedDay, rejectsPath))
                 using (var proxy = new ConsumptionProxy("ConsumptionEndpoint"))
                 {
@@ -75,72 +81,86 @@ namespace Client
                     try
                     {
                         var startAck = proxy.Channel.StartSession(meta);
-                        Console.WriteLine("Server StartSession ACK: {0} - {1}",
-                            startAck.Status, startAck.Message);
+                        ConsoleUi.Info("StartSession ACK: " + startAck.Status + " - " + startAck.Message);
+                        ConsoleUi.Blank();
 
                         int sent = 0;
+                        int idx = 0;
                         foreach (var sample in loader.EnumerateDaySamples())
                         {
+                            idx++;
                             try
                             {
                                 var ack = proxy.Channel.PushSample(sample);
                                 sent++;
-                                Console.WriteLine("  -> poslat row#{0} H={1} ack={2} ({3}/{4})",
-                                    sample.RowIndex, sample.Hour, ack.Status, ack.Received, ack.Total);
+                                if (ack.Status == AckStatus.Missing)
+                                {
+                                    ConsoleUi.Reject(string.Format(CultureInfo.InvariantCulture,
+                                        "{0,3}-> Uzorak odbijen na serveru: NaN/missing (row#{1})",
+                                        idx, sample.RowIndex));
+                                }
+                                else
+                                {
+                                    ConsoleUi.Ok(string.Format(CultureInfo.InvariantCulture,
+                                        "{0,3} -> Uzorak uspesno obradjen: {1} ({2}/{3})",
+                                        idx, ack.Message, ack.Received, ack.Total));
+                                }
                             }
                             catch (FaultException<ValidationFault> fex)
                             {
-                                Console.WriteLine("  !! ValidationFault row#{0}: {1} - {2}",
-                                    fex.Detail.RowIndex, fex.Detail.Field, fex.Detail.Reason);
+                                ConsoleUi.Reject(string.Format(CultureInfo.InvariantCulture,
+                                    "{0,3}-> Uzorak odbijen zbog ne validnih podataka: {1} - {2} (row#{3})",
+                                    idx, fex.Detail.Field, fex.Detail.Reason, fex.Detail.RowIndex));
                             }
                             catch (FaultException<DataFormatFault> fex)
                             {
-                                Console.WriteLine("  !! DataFormatFault row#{0}: {1}",
-                                    fex.Detail.RowIndex, fex.Detail.Reason);
+                                ConsoleUi.Reject(string.Format(CultureInfo.InvariantCulture,
+                                    "{0,3}-> Uzorak odbijen zbog formata: {1} (row#{2})",
+                                    idx, fex.Detail.Reason, fex.Detail.RowIndex));
                             }
                         }
 
                         var endAck = proxy.Channel.EndSession();
-                        Console.WriteLine();
-                        Console.WriteLine("Server EndSession ACK: {0} - primljeno {1}/{2}",
-                            endAck.Status, endAck.Received, endAck.Total);
-                        Console.WriteLine("Klijent: poslato {0}, odbijeno lokalno {1}.",
-                            sent, loader.RejectedCount);
+                        ConsoleUi.Blank();
+                        ConsoleUi.Info(string.Format(CultureInfo.InvariantCulture,
+                            "EndSession ACK: {0} - primljeno {1}/{2}",
+                            endAck.Status, endAck.Received, endAck.Total));
+                        ConsoleUi.Info(string.Format(CultureInfo.InvariantCulture,
+                            "Klijent: poslato {0}, odbijeno lokalno {1}",
+                            sent, loader.RejectedCount));
                     }
                     catch (FaultException<ValidationFault> fex)
                     {
-                        Console.WriteLine("StartSession ValidationFault: {0} - {1}",
-                            fex.Detail.Field, fex.Detail.Reason);
+                        ConsoleUi.Fault("VALIDATION", "StartSession: " + fex.Detail.Field + " - " + fex.Detail.Reason);
                     }
                     catch (FaultException<DataFormatFault> fex)
                     {
-                        Console.WriteLine("StartSession DataFormatFault: {0}", fex.Detail.Reason);
+                        ConsoleUi.Fault("DATAFORMAT", "StartSession: " + fex.Detail.Reason);
                     }
                     catch (CommunicationException cex)
                     {
-                        Console.WriteLine("Greska komunikacije: {0}", cex.Message);
+                        ConsoleUi.Fault("COMM", cex.Message);
                     }
                     catch (TimeoutException tex)
                     {
-                        Console.WriteLine("Timeout: {0}", tex.Message);
+                        ConsoleUi.Fault("TIMEOUT", tex.Message);
                     }
                 }
 
-                Console.WriteLine();
-                Console.WriteLine("Pritisnite ENTER za izlaz.");
+                ConsoleUi.Blank();
+                ConsoleUi.Info("Pritisnite ENTER za izlaz.");
                 Console.ReadLine();
             }
             catch (InvalidOperationException ioex)
             {
-                // Konfiguraciona greska iz CsvDayLoader (npr. nema kolona za zemlju)
-                Console.WriteLine("Konfiguraciona greska: {0}", ioex.Message);
-                Console.WriteLine("Pritisnite ENTER za izlaz.");
+                ConsoleUi.Fault("CONFIG", ioex.Message);
+                ConsoleUi.Info("Pritisnite ENTER za izlaz.");
                 Console.ReadLine();
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Greska: {0}", ex.Message);
-                Console.WriteLine("Pritisnite ENTER za izlaz.");
+                ConsoleUi.Fault("ERROR", ex.Message);
+                ConsoleUi.Info("Pritisnite ENTER za izlaz.");
                 Console.ReadLine();
             }
         }
