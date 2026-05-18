@@ -292,6 +292,7 @@ namespace Client
                     _fileStream.Dispose();
                     _fileStream = null;
                 }
+                ConsoleUi.Info("[DISPOSE] CsvDayLoader: StreamReader, FileStream (CSV), StreamWriter, FileStream (rejects) oslobodjeni.");
             }
             _disposed = true;
         }

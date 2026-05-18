@@ -29,9 +29,11 @@ namespace Client
             if (_disposed) return;
             if (disposing)
             {
+                string channelState = "n/a";
                 var ch = _channel as ICommunicationObject;
                 if (ch != null)
                 {
+                    channelState = ch.State.ToString();
                     try
                     {
                         if (ch.State == CommunicationState.Faulted) ch.Abort();
@@ -41,8 +43,10 @@ namespace Client
                 }
                 _channel = null;
 
+                string factoryState = "n/a";
                 if (_factory != null)
                 {
+                    factoryState = _factory.State.ToString();
                     try
                     {
                         if (_factory.State == CommunicationState.Faulted) _factory.Abort();
@@ -51,6 +55,7 @@ namespace Client
                     catch { _factory.Abort(); }
                     _factory = null;
                 }
+                ConsoleUi.Info("[DISPOSE] ConsumptionProxy: channel (" + channelState + ") i ChannelFactory (" + factoryState + ") zatvoreni.");
             }
             _disposed = true;
         }

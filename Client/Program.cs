@@ -25,6 +25,10 @@ namespace Client
                 string countryCode = ConfigurationManager.AppSettings["CountryCode"];
                 string selectedDayStr = ConfigurationManager.AppSettings["SelectedDay"];
                 string rejectsPath = ConfigurationManager.AppSettings["RejectsFile"];
+                string simulateAbortRaw = ConfigurationManager.AppSettings["SimulateAbortAfter"];
+                int simulateAbortAfter;
+                if (!int.TryParse(simulateAbortRaw, NumberStyles.Integer, CultureInfo.InvariantCulture, out simulateAbortAfter))
+                    simulateAbortAfter = 0;
 
                 if (string.IsNullOrWhiteSpace(csvPath))
                     throw new ConfigurationErrorsException("Nedostaje 'CsvFilePath' u App.config.");
@@ -47,6 +51,8 @@ namespace Client
                 ConsoleUi.Info("Country : " + countryCode);
                 ConsoleUi.Info("Day     : " + selectedDay.ToString("yyyy-MM-dd"));
                 ConsoleUi.Info("Rejects : " + rejectsPath);
+                if (simulateAbortAfter > 0)
+                    ConsoleUi.Info("Simulate: prekid prenosa posle " + simulateAbortAfter + " uzoraka");
                 ConsoleUi.Blank();
 
                 int totalForDay;
@@ -89,21 +95,28 @@ namespace Client
                         foreach (var sample in loader.EnumerateDaySamples())
                         {
                             idx++;
+                            if (simulateAbortAfter > 0 && sent >= simulateAbortAfter)
+                            {
+                                ConsoleUi.Fault("SIMULATION",
+                                    "Prekid prenosa posle " + sent + " poslatih uzoraka. Bacam izuzetak da proverim oslobadjanje resursa.");
+                                throw new InvalidOperationException("Simulacija prekida prenosa.");
+                            }
                             try
                             {
                                 var ack = proxy.Channel.PushSample(sample);
                                 sent++;
+                                double pct = ack.Total > 0 ? 100.0 * ack.Received / ack.Total : 0.0;
                                 if (ack.Status == AckStatus.Missing)
                                 {
                                     ConsoleUi.Reject(string.Format(CultureInfo.InvariantCulture,
-                                        "{0,3}-> Uzorak odbijen na serveru: NaN/missing (row#{1})",
-                                        idx, sample.RowIndex));
+                                        "{0,3}-> Uzorak odbijen na serveru: NaN/missing (row#{1})  [prenos u toku {2}/{3}, {4:F2}%]",
+                                        idx, sample.RowIndex, ack.Received, ack.Total, pct));
                                 }
                                 else
                                 {
                                     ConsoleUi.Ok(string.Format(CultureInfo.InvariantCulture,
-                                        "{0,3} -> Uzorak uspesno obradjen: {1} ({2}/{3})",
-                                        idx, ack.Message, ack.Received, ack.Total));
+                                        "{0,3} -> Uzorak uspesno obradjen: {1}  [prenos u toku {2}/{3}, {4:F2}%]",
+                                        idx, ack.Message, ack.Received, ack.Total, pct));
                                 }
                             }
                             catch (FaultException<ValidationFault> fex)
@@ -145,8 +158,23 @@ namespace Client
                     {
                         ConsoleUi.Fault("TIMEOUT", tex.Message);
                     }
+                    catch (InvalidOperationException sim) when (sim.Message == "Simulacija prekida prenosa.")
+                    {
+                        ConsoleUi.Fault("SIMULATION",
+                            "Izuzetak uhvacen u inner-catch-u. Izlazim iz using-blokova: Dispose ce se pozvati za loader i proxy.");
+                        throw;
+                    }
                 }
 
+                ConsoleUi.Blank();
+                ConsoleUi.Info("Pritisnite ENTER za izlaz.");
+                Console.ReadLine();
+            }
+            catch (InvalidOperationException sim) when (sim.Message == "Simulacija prekida prenosa.")
+            {
+                ConsoleUi.Blank();
+                ConsoleUi.Info("[SIMULATION] Posle bacanja izuzetka, using/finally su sigurno pozvali Dispose.");
+                ConsoleUi.Info("[SIMULATION] Pogledaj iznad linije '[DISPOSE]' kao dokaz da su resursi oslobodjeni.");
                 ConsoleUi.Blank();
                 ConsoleUi.Info("Pritisnite ENTER za izlaz.");
                 Console.ReadLine();

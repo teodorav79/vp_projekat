@@ -105,7 +105,8 @@ namespace Server
                 _received++;
                 _writer.WriteReject(sample.RowIndex, "NaN vrednost", SerializeRow(sample));
                 ConsoleUi.Reject(string.Format(CultureInfo.InvariantCulture,
-                    "{0}-> Uzorak odbijen: NaN vrednost (row#{1})", _received, sample.RowIndex));
+                    "{0}-> Uzorak odbijen: NaN vrednost (row#{1})  [prenos u toku {2}/{3}, {4:F2}%]",
+                    _received, sample.RowIndex, _received, _meta.TotalSamples, ProgressPct()));
                 return new AckResult
                 {
                     Status = AckStatus.Missing,
@@ -160,8 +161,9 @@ namespace Server
             _received++;
 
             ConsoleUi.Ok(string.Format(CultureInfo.InvariantCulture,
-                "{0,3} -> Uzorak uspesno obradjen: row#{1}, H={2}, Actual={3} MW, Forecast={4} MW",
-                _received, sample.RowIndex, sample.Hour, sample.ActualMW, sample.ForecastMW));
+                "{0,3} -> Uzorak uspesno obradjen: row#{1}, H={2}, Actual={3} MW, Forecast={4} MW  [prenos u toku {5}/{6}, {7:F2}%]",
+                _received, sample.RowIndex, sample.Hour, sample.ActualMW, sample.ForecastMW,
+                _received, _meta.TotalSamples, ProgressPct()));
 
             EventBus.RaiseSampleReceived(this, new SampleEventArgs
             {
@@ -208,6 +210,12 @@ namespace Server
             _sessionActive = false;
             DisposeWriter();
             return result;
+        }
+
+        private double ProgressPct()
+        {
+            if (_meta == null || _meta.TotalSamples <= 0) return 0.0;
+            return 100.0 * _received / _meta.TotalSamples;
         }
 
         private static double ReadDouble(string key, double defaultValue)
